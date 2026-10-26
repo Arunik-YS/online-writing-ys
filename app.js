@@ -119,7 +119,7 @@ submitBtn.addEventListener('click', async () => {
 
     // 지워졌던 이미지 압축 로직 복구
     if (file) {
-      const options = { maxSizeMB: 0.5, maxWidthOrHeight: 800, useWebWorker: true };
+      const options = { maxSizeMB: 0.2, maxWidthOrHeight: 800, useWebWorker: true };
       const compressedFile = await imageCompression(file, options);
       imageBase64 = await convertToBase64(compressedFile);
     }
@@ -163,65 +163,97 @@ submitBtn.addEventListener('click', async () => {
   }
 });
 
-// --- 게시판 실시간 렌더링 ---
-const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
-onSnapshot(q, (snapshot) => {
-  feedSection.innerHTML = ""; 
-  snapshot.forEach((docSnap) => {
-    const data = docSnap.data();
-    const postId = docSnap.id;
-    const postDiv = document.createElement('div');
-    postDiv.className = 'post';
-    postDiv.style.backgroundColor = data.cardColor || '#ffffff';
-    
-    const textEscaped = data.text.replace(/"/g, '&quot;');
-    const titleEscaped = data.title ? data.title.replace(/"/g, '&quot;') : "제목 없음";
-    const isMyPost = data.author === currentStudentName;
-    
-    // 수정/삭제 버튼 (데이터에 title 추가)
-    const actionButtons = isMyPost ? `
-      <div class="post-actions">
-        <span class="action-btn edit-btn" data-id="${postId}" data-title="${titleEscaped}" data-text="${textEscaped}" data-color="${data.color}" data-size="${data.size}">✏️</span>
-        <span class="action-btn delete-btn" data-id="${postId}">❌</span>
-      </div>
-    ` : '';
+// --- 게시판 실시간 렌더링 및 시스템 상태 제어 ---
+const systemStatusMessage = document.createElement('div');
+systemStatusMessage.style.textAlign = 'center';
+systemStatusMessage.style.padding = '50px';
+systemStatusMessage.style.fontSize = '20px';
+systemStatusMessage.style.color = '#555';
+systemStatusMessage.style.display = 'none';
+boardSection.insertBefore(systemStatusMessage, feedSection);
 
-    let htmlContent = actionButtons;
+let postsUnsubscribe = null; // 실시간 수신 해제용 변수
 
-    // 1. 제목 표시
-    htmlContent += `<h3 style="margin-top: 0; margin-bottom: 10px; padding-right: 50px;">${data.title || "제목 없음"}</h3>`;
-
-    // 2. 그림 표시
-    if (data.imageUrl) { htmlContent += `<img src="${data.imageUrl}" alt="첨부 사진">`; }
-    
-    // 3. 내용 표시
-    htmlContent += `<p style="color:${data.color}; font-size:${data.size}; margin-top:15px; line-height:1.5;">${data.text.replace(/\n/g, '<br>')}</p>`;
-    
-    // 4. 글쓴이 표시 (구분선과 함께 아래쪽에 배치)
-    htmlContent += `
-      <div class="author-name" style="margin-top: 15px; border-top: 1px dashed rgba(0,0,0,0.2); padding-top: 10px; text-align: right;">
-        👤 ${data.author || '익명'}
-      </div>
-    `;
-    
-    // 댓글 렌더링
-    htmlContent += `<div class="comments-area">`;
-    const comments = data.comments || [];
-    comments.forEach(c => {
-      htmlContent += `<div class="comment-item"><strong>${c.author}</strong>: ${c.text}</div>`;
-    });
-    
-    htmlContent += `
-        <div class="comment-input-box">
-          <input type="text" id="comment-${postId}" placeholder="댓글 달기...">
-          <button class="add-comment-btn" data-id="${postId}">입력</button>
-        </div>
-      </div>
-    `;
-    
-    postDiv.innerHTML = htmlContent;
-    feedSection.appendChild(postDiv);
+function escapeHTML(str) {
+  if (!str) return "";
+  return str.replace(/[&<>"']/g, function(match) {
+    const escapeMap = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+    return escapeMap[match];
   });
+}
+
+// DB의 설정 상태를 감지하여 화면 제어
+onSnapshot(doc(db, 'settings', 'system'), (docSnap) => {
+  const isActive = docSnap.data()?.isClassActive;
+
+  if (isActive) {
+    // 1. 수업 중: UI 열기 및 데이터 수신 시작
+    systemStatusMessage.style.display = 'none';
+    feedSection.style.display = 'grid';
+    fabWrite.style.display = 'block';
+
+    if (!postsUnsubscribe) {
+      const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
+      postsUnsubscribe = onSnapshot(q, (snapshot) => {
+        feedSection.innerHTML = ""; 
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          const postId = docSnap.id;
+          const postDiv = document.createElement('div');
+          postDiv.className = 'post';
+          postDiv.style.backgroundColor = data.cardColor || '#ffffff';
+          
+          const titleEscaped = escapeHTML(data.title || "제목 없음");
+          const textEscaped = escapeHTML(data.text);
+          const authorEscaped = escapeHTML(data.author || "익명");
+          const isMyPost = data.author === currentStudentName;
+          
+          const actionButtons = isMyPost ? `
+            <div class="post-actions">
+              <span class="action-btn edit-btn" data-id="${postId}" data-title="${titleEscaped}" data-text="${textEscaped}" data-color="${data.color}" data-size="${data.size}">✏️</span>
+              <span class="action-btn delete-btn" data-id="${postId}">❌</span>
+            </div>
+          ` : '';
+
+          let htmlContent = actionButtons;
+          htmlContent += `<h3 style="margin-top: 0; margin-bottom: 10px; padding-right: 50px;">${data.title || "제목 없음"}</h3>`;
+          if (data.imageUrl) htmlContent += `<img src="${data.imageUrl}" alt="첨부 사진">`; 
+          htmlContent += `<p style="color:${data.color}; font-size:${data.size}; margin-top:15px; line-height:1.5;">${data.text.replace(/\n/g, '<br>')}</p>`;
+          htmlContent += `<div class="author-name" style="margin-top: 15px; border-top: 1px dashed rgba(0,0,0,0.2); padding-top: 10px; text-align: right;">👤 ${data.author || '익명'}</div>`;
+          
+          htmlContent += `<div class="comments-area">`;
+          const comments = data.comments || [];
+          comments.forEach(c => {
+  htmlContent += `<div class="comment-item"><strong>${escapeHTML(c.author)}</strong>: ${escapeHTML(c.text)}</div>`;
+});
+          htmlContent += `
+              <div class="comment-input-box">
+                <input type="text" id="comment-${postId}" placeholder="댓글 달기...">
+                <button class="add-comment-btn" data-id="${postId}">입력</button>
+              </div>
+            </div>
+          `;
+          
+          postDiv.innerHTML = htmlContent;
+          feedSection.appendChild(postDiv);
+        });
+      }, (error) => {
+        console.error("데이터 수신 에러:", error);
+      });
+    }
+  } else {
+    // 2. 수업 종료: UI 닫기 및 데이터 수신 해제
+    systemStatusMessage.innerText = "🔒 현재는 수업이 종료되어 게시판이 닫혀 있습니다.";
+    systemStatusMessage.style.display = 'block';
+    feedSection.style.display = 'none';
+    fabWrite.style.display = 'none';
+    
+    if (postsUnsubscribe) {
+      postsUnsubscribe(); // 권한 에러가 발생하기 전에 미리 연결 차단
+      postsUnsubscribe = null;
+    }
+    feedSection.innerHTML = "";
+  }
 });
 
 // --- 이벤트 위임 (수정, 삭제, 댓글 달기 클릭 처리) ---
@@ -266,4 +298,173 @@ feedSection.addEventListener('click', async (e) => {
       inputEl.value = ""; 
     }
   }
+});
+
+// ==========================================
+// 사진 편집기 (초상권 보호 모자이크) 로직 추가
+// ==========================================
+const openEditorBtn = document.getElementById('openEditorBtn');
+const editorModal = document.getElementById('editorModal');
+const closeEditorBtn = document.getElementById('closeEditorBtn');
+const editorUpload = document.getElementById('editorUpload');
+const photoCanvas = document.getElementById('photoCanvas');
+const ctx = photoCanvas.getContext('2d');
+const stickerToolbar = document.getElementById('stickerToolbar');
+const downloadBtn = document.getElementById('downloadBtn');
+const undoBtn = document.getElementById('undoBtn');
+
+let currentSticker = '😀'; // 기본 스티커
+let baseImage = new Image();
+let canvasHistory = []; // 되돌리기를 위한 배열
+
+// 팝업 열기/닫기
+openEditorBtn.addEventListener('click', () => editorModal.style.display = 'flex');
+closeEditorBtn.addEventListener('click', () => editorModal.style.display = 'none');
+
+// 스티커 선택 이벤트
+document.querySelectorAll('.sticker-btn').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    currentSticker = e.target.getAttribute('data-emoji');
+    // 시각적 피드백 (선택된 스티커 표시)
+    document.querySelectorAll('.sticker-btn').forEach(b => b.style.background = 'white');
+    e.target.style.background = '#cce0ff';
+  });
+});
+
+// 사진 불러와서 캔버스에 그리기
+editorUpload.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    baseImage.onload = () => {
+      // 사진 원본 크기에 맞춰 캔버스 크기 조절
+      photoCanvas.width = baseImage.width;
+      photoCanvas.height = baseImage.height;
+      ctx.drawImage(baseImage, 0, 0);
+      
+      // 숨겨진 도구들 보이게 하기
+      photoCanvas.style.display = 'block';
+      stickerToolbar.style.display = 'flex'; // 버튼들을 가로로 예쁘게 정렬
+      downloadBtn.style.display = 'block';
+      
+      // ★ 추가된 부분: 사진을 처음 불렀을 때 100% 비율로 초기화
+      updateZoom(1.0); 
+      
+      // 초기 상태 저장
+      canvasHistory = [photoCanvas.toDataURL()]; 
+    };
+    baseImage.src = event.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+// 확대/축소 관련 변수
+const zoomInBtn = document.getElementById('zoomInBtn');
+const zoomOutBtn = document.getElementById('zoomOutBtn');
+const zoomLevelText = document.getElementById('zoomLevelText');
+let currentZoom = 1.0;
+let initialPinchDistance = null;
+
+// 줌(Zoom) 업데이트 함수
+function updateZoom(newZoom) {
+  currentZoom = Math.max(0.5, Math.min(newZoom, 4.0)); // 50% ~ 400% 제한
+  if (zoomLevelText) zoomLevelText.innerText = Math.round(currentZoom * 100) + '%';
+  photoCanvas.style.maxWidth = 'none'; // 기본 100% 제한 해제
+  photoCanvas.style.width = (currentZoom * 100) + '%';
+}
+
+// 버튼 클릭 이벤트
+if (zoomInBtn) zoomInBtn.addEventListener('click', () => updateZoom(currentZoom + 0.2));
+if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => updateZoom(currentZoom - 0.2));
+
+// 두 손가락 거리 계산 (핀치 줌)
+function getDistance(touches) {
+  const dx = touches[0].clientX - touches[1].clientX;
+  const dy = touches[0].clientY - touches[1].clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+// 캔버스 터치/클릭 시 스티커 붙이기
+function addSticker(e) {
+  if (!baseImage.src) return;
+  
+  // ★ 두 손가락 이상 닿았을 때는 줌 동작이므로 스티커를 붙이지 않음
+  if (e.touches && e.touches.length > 1) return;
+  
+  e.preventDefault(); 
+  
+  const rect = photoCanvas.getBoundingClientRect();
+  const scaleX = photoCanvas.width / rect.width;
+  const scaleY = photoCanvas.height / rect.height;
+  
+  let clientX, clientY;
+  if (e.touches && e.touches.length > 0) {
+    clientX = e.touches[0].clientX; 
+    clientY = e.touches[0].clientY;
+  } else {
+    clientX = e.clientX; 
+    clientY = e.clientY;
+  }
+
+  const x = (clientX - rect.left) * scaleX;
+  const y = (clientY - rect.top) * scaleY;
+
+  const baseFontSize = Math.max(photoCanvas.width * 0.15, 50); 
+  const fontSize = baseFontSize / currentZoom; 
+  
+  ctx.font = `${fontSize}px Arial`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(currentSticker, x, y);
+  
+  canvasHistory.push(photoCanvas.toDataURL());
+}
+
+// 스티커 이벤트 연결
+photoCanvas.addEventListener('mousedown', addSticker);
+photoCanvas.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 2) initialPinchDistance = getDistance(e.touches);
+  addSticker(e);
+}, { passive: false });
+
+// 두 손가락 핀치 줌 이동 이벤트
+photoCanvas.addEventListener('touchmove', (e) => {
+  if (e.touches.length === 2 && initialPinchDistance) {
+    e.preventDefault(); // 화면 전체 스크롤 방지
+    const currentDistance = getDistance(e.touches);
+    const zoomChange = (currentDistance - initialPinchDistance) * 0.005; // 민감도 조절
+    updateZoom(currentZoom + zoomChange);
+    initialPinchDistance = currentDistance;
+  }
+}, { passive: false });
+
+photoCanvas.addEventListener('touchend', (e) => {
+  if (e.touches && e.touches.length < 2) initialPinchDistance = null;
+});
+
+// 되돌리기 로직
+undoBtn.addEventListener('click', () => {
+  if (canvasHistory.length > 1) {
+    canvasHistory.pop(); 
+    const prevImage = new Image();
+    prevImage.onload = () => {
+      ctx.clearRect(0, 0, photoCanvas.width, photoCanvas.height);
+      ctx.drawImage(prevImage, 0, 0);
+    };
+    prevImage.src = canvasHistory[canvasHistory.length - 1]; 
+  }
+});
+
+// 다운로드 로직
+downloadBtn.addEventListener('click', () => {
+  const link = document.createElement('a');
+  link.download = 'edited_photo.png'; 
+  link.href = photoCanvas.toDataURL('image/png'); 
+  link.click(); 
+  
+  // 편집이 끝나면 화면을 100%로 복구
+  updateZoom(1.0); 
+  alert("수정된 사진이 패드에 저장되었습니다!\n이제 게시판에 들어가서 방금 저장한 사진을 첨부해 보세요.");
 });
