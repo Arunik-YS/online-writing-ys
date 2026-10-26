@@ -43,17 +43,7 @@
       overflow-y: auto; /* 내용이 넘치면 스크롤 생성 */
     }
     .close-btn { position: absolute; top: 15px; right: 20px; font-size: 28px; cursor: pointer; color: #888; }
-    .emoji-btn {
-      font-size: 22px; /* 패드에서 누르기 편하게 크기 확대 */
-      padding: 5px 8px;
-      background: white;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      cursor: pointer;
-      box-shadow: 1px 1px 3px rgba(0,0,0,0.1);
-      transition: background 0.2s;
-    }
-    .emoji-btn:hover { background: #e0f7fa; }
+    
   </style>
   <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.1/dist/browser-image-compression.js"></script>
 </head>
@@ -66,6 +56,10 @@
     <p>게시판에 입장하려면 이름을 입력해 주세요.</p>
     <input type="text" id="studentName" placeholder="자신의 이름 입력">
     <button id="studentLoginBtn">입장하기</button>
+    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px dashed #ccc;">
+      <p style="font-size: 14px; color: #555;">얼굴이 나온 사진이 있다면 먼저 초상권을 보호해 주세요.</p>
+      <button id="openEditorBtn" style="background-color: #ff9800; color: white; padding: 10px 20px; font-size: 16px; border: none; border-radius: 5px; cursor: pointer; box-shadow: 1px 2px 5px rgba(0,0,0,0.2);">🎨 사진 수정하기 (모자이크)</button>
+    </div>
   </div>
 
   <!-- 메인 게시판 영역 -->
@@ -113,7 +107,7 @@
         <button type="button" class="emoji-btn" onclick="addEmoji('💖')">💖</button>
         <button type="button" class="emoji-btn" onclick="addEmoji('✨')">✨</button>
       </div>
-      <textarea id="postContent" placeholder="자신의 추억과 그때의 마음을 표현해 보세요." rows="5" style="width: 100%; margin-top: 10px; padding: 10px; box-sizing: border-box;"></textarea>
+      <textarea id="postContent" placeholder="경험한 일과 그때의 마음을 표현해 보세요." rows="5" style="width: 100%; margin-top: 10px; padding: 10px; box-sizing: border-box;"></textarea>
       <div class="file-upload" style="margin-top: 10px;">
         <label for="imageUpload">사진 첨부:</label>
         <input type="file" id="imageUpload" accept="image/*">
@@ -123,6 +117,37 @@
         <label style="display: block; margin-top: 5px;"><input type="checkbox" id="checkPrivacy"> 개인 정보(이름, 주소 등)를 가렸나요?</label>
       </div>
       <button id="submitBtn" style="margin-top: 15px; padding: 10px 20px; width: 100%; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px;">게시글 올리기</button>
+    </div>
+  </div>
+
+  <div id="editorModal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 600px; text-align: center;">
+      <span class="close-btn" id="closeEditorBtn">&times;</span>
+      <h2 style="margin-top: 0;">사진 초상권 보호하기</h2>
+      <p style="font-size: 14px; color: #666;">사진을 불러온 뒤, 스티커를 선택하고 얼굴을 터치하세요.</p>
+      
+      <input type="file" id="editorUpload" accept="image/*" style="margin-bottom: 15px;">
+      
+      <!-- 스티커 툴바 -->
+      <div id="stickerToolbar" style="margin-bottom: 15px; display: none; background: #f0f0f0; padding: 10px; border-radius: 8px;">
+        <button class="emoji-btn sticker-btn" data-emoji="😀">😀</button>
+        <button class="emoji-btn sticker-btn" data-emoji="😎">😎</button>
+        <button class="emoji-btn sticker-btn" data-emoji="👽">👽</button>
+        <button class="emoji-btn sticker-btn" data-emoji="💖">💖</button>
+        <button id="undoBtn" style="padding: 5px 10px; margin-left: 10px; background: #ddd; border: none; border-radius: 5px; cursor: pointer;">↩️ 되돌리기</button>
+        <div style="margin-left: auto; display: flex; align-items: center; gap: 5px; background: white; padding: 5px; border-radius: 5px; border: 1px solid #ccc;">
+          <button id="zoomOutBtn" style="padding: 5px 10px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; background: none;">-</button>
+          <span id="zoomLevelText" style="font-size: 14px; min-width: 40px; text-align: center;">100%</span>
+          <button id="zoomInBtn" style="padding: 5px 10px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; background: none;">+</button>
+        </div>
+      </div>
+
+      <!-- 편집할 캔버스 영역 -->
+      <div style="overflow: auto; max-height: 50vh; border: 1px solid #ccc; display: inline-block; background: #eee;">
+        <canvas id="photoCanvas" style="max-width: 100%; display: none; touch-action: none; cursor: crosshair;"></canvas>
+      </div>
+
+      <button id="downloadBtn" style="margin-top: 15px; padding: 10px; width: 100%; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; display: none;">💾 기기에 저장하기 (다운로드)</button>
     </div>
   </div>
   <script type="module" src="app.js"></script>
