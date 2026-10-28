@@ -457,14 +457,30 @@ undoBtn.addEventListener('click', () => {
   }
 });
 
-// 다운로드 로직
+// 다운로드(저장) 로직 (아이패드 호환성 개선)
 downloadBtn.addEventListener('click', () => {
-  const link = document.createElement('a');
-  link.download = 'edited_photo.png'; 
-  link.href = photoCanvas.toDataURL('image/png'); 
-  link.click(); 
+  // 1. 캔버스 이미지를 추출
+  const dataUrl = photoCanvas.toDataURL('image/png');
   
-  // 편집이 끝나면 화면을 100%로 복구
+  // 2. 화면에 꾹 누를 수 있는 실제 <img> 태그 생성 및 표시
+  let resultImg = document.getElementById('resultImg');
+  if (!resultImg) {
+    resultImg = document.createElement('img');
+    resultImg.id = 'resultImg';
+    resultImg.style.maxWidth = '100%';
+    resultImg.style.border = '3px solid #4CAF50'; 
+    resultImg.style.borderRadius = '8px';
+    resultImg.style.marginTop = '10px';
+    photoCanvas.parentNode.insertBefore(resultImg, photoCanvas);
+  }
+  resultImg.src = dataUrl;
+  
+  // 3. 기존 캔버스와 툴바 숨기기
+  photoCanvas.style.display = 'none';
+  document.getElementById('stickerToolbar').style.display = 'none';
+  downloadBtn.style.display = 'none';
+  
+  // 4. 안내창 띄우기
   updateZoom(1.0); 
-  alert("수정된 사진이 패드에 저장되었습니다!\n이제 게시판에 들어가서 방금 저장한 사진을 첨부해 보세요.");
+  alert("✅ 편집이 완료되었습니다!\n\n화면에 나타난 초록색 테두리의 사진을 [손가락으로 꾹~ 누른 후 '사진 앱에 저장']을 선택해 주세요.");
 });
